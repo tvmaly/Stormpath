@@ -4,7 +4,7 @@ use Carp;
 use version; 
 $VERSION = qv('1.0.0');
 
-use REST::Client;
+use Stormpath::Client;
 
 use Moo;
 use namespace::clean;
@@ -16,13 +16,22 @@ has 'api_key' => (
     required => 1 
 );
 
-has 'client' => (
-    is => 'rw',
-    default => sub {
-        REST::Client->new();
-    }
+has 'api_id' => ( 
+    is => 'ro',
+    required => 1 
 );
 
+
+has client => (
+  is => 'lazy'
+);
+
+sub _build_client {
+    my $self = shift;
+    Carp::confess("api_key and api_id required\n") if !defined($self->api_id()) || !defined($self->api_key());
+    return Stormpath::Client->new(id => $self->api_id(), secret => $self->api_secret());
+        
+}
 
 has applications => (
     is          => 'ro',

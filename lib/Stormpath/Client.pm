@@ -1,10 +1,15 @@
 package Stormpath::Client;
+use Carp;
 use HTTP::Request;
 use Date::Format qw(time2str);
 use UUID::Tiny ':std';
 use Encode qw(encode);
-use Digest::SHA qw(sha256_hex);
-use base qw(REST::Client);
+use Digest::SHA qw(sha256_hex hmac_sha256_hex);
+use Config::YAML;
+use MIME::Base64;
+use Moo;
+
+extends qw(REST::Client);
 
 use constant HOST_HEADER => 'Host';
 use constant AUTHORIZATION_HEADER => 'Authorization';
@@ -19,9 +24,54 @@ use constant DATE_FORMAT => '%Y%m%d';
 use constant TIMESTAMP_FORMAT => '%Y%m%dT%H%M%SZ';
 use constant NL => '\n';
 
-# TODO
-# need to see if we can mix in Moo and add accessors for API key and secret
-# this is needed in the signing method
+sub FOREIGNBUILDARGS {
+    my $class = shift;
+    return @_;
+}
+
+sub BUILD {
+
+  if($_[0]->api_key_file_location() && -e $_[0]->api_key_file_location()) {
+    my $c = Config::YAML->new( config => $_[0]->api_key_file_location() );
+    $_[0]->id($c->get_id());
+    $_[0]->secret($c->get_key());
+  } elsif(!defined($_[0]->id()) || !defined($_[0]->secret())) {
+        Carp::confess("if api file not provided id and secret must be");
+  }
+
+}
+
+has 'id' => ( 
+    is => 'rw'
+);
+
+has 'secret' => ( 
+    is => 'rw'
+);
+
+has 'method' => ( 
+    is => 'ro',
+    default => sub {
+        return 'SAuthc1';
+    }
+);
+
+has 'api_key_file_location' => ( 
+    is => 'rw',
+);
+
+# setup request to do basic authorization
+sub basic {
+
+    my $self = shift;
+
+    my $http_request = shift;
+
+    $http_request->authorization_basic($self->id(), $self->secret());
+
+    return $http_request;
+
+}
 
 sub http_request {
 
@@ -38,6 +88,8 @@ sub http_request {
 
 }
 
+# use Stormpath algorithm to sign request
+# TODO test that my implementation works
 sub sign_request {
  
     my $self = shift;
@@ -112,14 +164,38 @@ sub sign_request {
             NL, $canonical_headers_string, NL, $signed_headers_string,
             NL, $request_payload_hash_hex);
 
-        id = '%s/%s/%s/%s' % (self._id, date_stamp, nonce, ID_TERMINATOR)
+    my $id = sprintf('%s/%s/%s/%s',($self->id(),$date_stamp,$nonce,ID_TERMINATOR) 
 
-        canonical_request_hash_hex = hashlib.sha256(
-            canonical_request.encode()).hexdigest()
+    my $canonical_request_hash_hex = sha256_hex($canonical_request);
 
-        string_to_sign = '%s%s%s%s%s%s%s' % (
-            ALGORITHM, NL, time_stamp, NL, id, NL, canonical_request_hash_hex)
+    my $string_to_sign = sprintf('%s%s%s%s%s%s%s',(ALGORITHM, NL, $time_stamp, NL, $id, NL, $canonical_request_hash_hex));
 
+    my $k_secret = sprintf('%s%s',(AUTHENTICATION_SCHEME, $self->secret()));
+
+    my $k_date = hmac_sha256_hex($date_stamp, $k_secret);
+
+    my $k_nonce = hmac_sha256_hex($nonce, $k_date);
+
+    my $k_signing = hmac_sha256_hex(ID_TERMINATOR, $k_nonce);
+
+    my $signature = hmac_sha256_hex($string_to_sign, $k_signing);
+
+    my $authorization_header = join(', ',(
+        sprintf('%s %s=%s',(AUTHENTICATION_SCHEME, SAUTHC1_ID, $id )),
+        sprintf('%s=%s',(SAUTHC1_SIGNED_HEADERS, $signed_headers_string )),
+        sprintf('%s=%s',SAUTHC1_SIGNATURE, $signature )));
+
+    )
+
+    $headers->{AUTHORIZATION_HEADER} = $authorization_header;
+
+    $http_request->{_headers}->clear;
+
+    foreach my $header_key (keys %$headers) {
+        $http_request->{_headers}->header($header_key, $headers->{$header_key});
+    }
+
+    return $http_request;
 
 }
 
