@@ -1,6 +1,7 @@
 package Stormpath::Client;
 use Carp;
 use Stormpath::Client::UserAgentProxy;
+use Stormpath::DataStore;
 use Moo;
 
 extends qw(REST::Client);
@@ -45,6 +46,13 @@ has 'useragent' => (
     is => 'lazy'
 );
 
+has 'data_store' => ( 
+    is => 'rw',
+    default => sub {
+        Stormpath::DataStore->new();
+    }
+);
+
 sub _build_useragent {
     my $ua_proxy = Stormpath::Client::UserAgentProxy->new(
     id => $self->id(),
@@ -59,6 +67,15 @@ sub _build_useragent {
 sub _buildUseragent {
     my $self = shift;
     return $self->useragent();
+}
+
+sub update_resource {
+
+    my $self = shift;
+
+    # TODO this was in data store of python but too many
+    # levels so we moved it to client
+
 }
 
 1;

@@ -227,24 +227,26 @@ has cache_manager => (
     }
 );
 
-has 'cache_manager' => (
-    is => 'rw',
-    default => sub {
+sub BUILD {
 
-        my $cache_options = $_[0]->cache_options();
+    my $self = shift;
 
-        my $cache = $_[0]->cache_manager();
+    my $cache_options = $self->cache_options();
 
-        foreach my $region (@{CACHE_REGIONS}) {
+    my $cache = $self->cache_manager();
 
-            my $regional_cache_options = exists($cache_options->{$region}) ? $cache_options->{$region} : {} ;
+    foreach my $region (@{CACHE_REGIONS}) {
 
-                $cache->set($region,$regional_cache_options);
+        my $regional_cache_options = exists($cache_options->{$region}) ? $cache_options->{$region} : {} ;
 
-            }
+            $cache->set($region,$regional_cache_options);
 
         }
+    }
 
-);
+    return;
+
+}
+
 
 1;

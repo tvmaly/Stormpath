@@ -1,7 +1,14 @@
 package Stormpath::Resources::Resource;
 use 5.14;
 use strict;
+use Carp;
 use Moo::Role;
+use String::CamelCase qw(camelize);
+
+has client => (
+    is       => 'ro',
+    required => 1
+);
 
 has base_url => (
     is       => 'ro',
@@ -9,6 +16,16 @@ has base_url => (
 );
 
 has sub_path => (
+    is       => 'rw',
+    required => 1
+);
+
+has writable_attrs => (
+    is       => 'rw',
+    required => 1
+);
+
+has autosaves => (
     is       => 'rw',
     required => 1
 );
@@ -50,7 +67,69 @@ has href => (
     is       => 'lazy'
 );
 
-sub _build_href {
+sub is_new {
+    return !defined($_[0]->href());
+}
+
+sub save {
+   
+    if($self->is_new()) {
+        # should we use Throwable::Factory
+        # or just Carp for less dependencies?
+        Carp::confess("Can't save new resources, use create instead");
+    }
+
+    $self->client()->update_resource($self->href(),$self->_get_properties());
+
+}
+
+sub non_attributes {
+    return {'dirty' => 1,'changed' => 1,'base_url' => 1,'sub_path' => 1};
+}
+
+sub dict_items {
+
+    my $non_attributes = $_[0]->non_attributes();
+
+    return grep { !exists($non_attributes->{$_}) } keys(%{
+        'Moo'->_constructor_maker_for(ref($_[0]))->all_attribute_specs
+    })
+}
+
+sub _get_properties {
+        my $data = {}
+
+        my $writable_attrs = $self->writable_attrs();
+        foreach my $k (grep { exists($writable_attrs->{$_}) } $self->dict_items()) {
+            $data->{camelize($k)} = $self->_sanitize_property($self->$k());
+
+        }
+
+        #for k, v in self.__dict__.items():
+            #if k in self.writable_attrs:
+                #data[self.to_camel_case(k)] = self._sanitize_property(v)
+
+        return $data
+
+}
+
+sub _sanitize_property {
+
+  # TODO convert from python
+    def _sanitize_property(value):
+        if isinstance(value, Resource):
+            if value.href:
+                return {'href': value.href}
+            else:
+                return value._get_properties()
+        elif isinstance(value, dict):
+            return {Resource.to_camel_case(k):Resource._sanitize_property(v)
+                for k, v in value.items()}
+        else:
+            return value
+}
+
+sub construct_href {
 
     my $self = shift;
 

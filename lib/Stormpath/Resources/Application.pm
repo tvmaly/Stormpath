@@ -13,6 +13,22 @@ has '+sub_path' => (
     default => sub { 'applications' },
 );
 
+has '+writable_attrs' => (
+    default => sub { 
+        return {
+        'description' => undef,
+        'name' => undef,
+        'status' => undef
+        };
+    },
+);
+
+has '+autosaves' => (
+    default => sub { 
+    return ();
+    },
+);
+
 has description => (
     is       => 'rw'
 );
